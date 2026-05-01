@@ -1,0 +1,57 @@
+project:
+  name: ipen5160_meituan_nlp
+  title_cn: "基于美团点评餐饮评论的细粒度情感分析与评分预测"
+  title_en: "Fine-Grained Sentiment Analysis and Rating Prediction for Meituan-Dianping Restaurant Reviews"
+
+paths:
+  external_data_dir: "/Users/maruixin/Downloads/5160/asap-master"
+  official_data_subdir: "data"
+  outputs_dir: "outputs"
+
+dataset:
+  preferred_files:
+    train: "train.csv"
+    val: "dev.csv"
+    test: "test.csv"
+  id_column_candidates: ["id", "index"]
+  text_column_candidates: ["review", "reviewbody", "text", "content"]
+  rating_column_candidates: ["star", "rating", "score", "stars"]
+  split_ratios:
+    train: 0.70
+    val: 0.15
+    test: 0.15
+  random_state: 42
+  label_mapping:
+    "1": "Positive"
+    "0": "Neutral"
+    "-1": "Negative"
+    "-2": "Not-Mentioned"
+
+model:
+  task_type: "auto"
+  encoder_name: "bert-base-chinese"
+  alternative_encoders:
+    - "hfl/chinese-roberta-wwm-ext"
+    - "hfl/chinese-macbert-base"
+  max_length: 256
+  batch_size: 64
+  eval_batch_size: 128
+  epochs: 3
+  learning_rate: 2.0e-5
+  weight_decay: 0.01
+  alpha: 0.2
+  random_seed: 42
+  dropout: 0.1
+  early_stopping_patience: 2
+  rating_loss: "mse"
+  use_mixed_precision: true
+  amp_dtype: "auto"
+  num_workers: 4
+  pin_memory: true
+  persistent_workers: true
+  prefetch_factor: 2
+  resume_if_available: true
+  save_checkpoint_each_epoch: true
+
+eda:
+  sample_review_count: 20
