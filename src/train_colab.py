@@ -71,22 +71,57 @@ class AspectSentimentDataset(Dataset):
             row["review_text"],
             row["aspect_name"],
             row["aspect_description"],
-            padding="max_length",
+            padding=False,
             truncation="only_first",
             max_length=self.max_length,
-            return_tensors="pt",
+            return_tensors=None,
         )
         item = {
-            "input_ids": encoded["input_ids"].squeeze(0),
-            "attention_mask": encoded["attention_mask"].squeeze(0),
             "sentiment_labels": torch.tensor(
                 self.label_to_id[str(row["sentiment_label"])], dtype=torch.long
             ),
             "rating_labels": torch.tensor(float(row["rating"]), dtype=torch.float32),
         }
-        if "token_type_ids" in encoded:
-            item["token_type_ids"] = encoded["token_type_ids"].squeeze(0)
+        for key in ("input_ids", "attention_mask", "token_type_ids"):
+            if key in encoded:
+                item[key] = encoded[key]
         return item
+
+
+class AspectSentimentCollator:
+    def __init__(
+        self,
+        tokenizer: AutoTokenizer,
+        use_dynamic_padding: bool,
+        max_length: int,
+        pad_to_multiple_of: int | None = None,
+    ) -> None:
+        self.tokenizer = tokenizer
+        self.use_dynamic_padding = use_dynamic_padding
+        self.max_length = max_length
+        self.pad_to_multiple_of = pad_to_multiple_of
+
+    def __call__(self, features: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tensor]:
+        sentiment_labels = torch.stack([feature["sentiment_labels"] for feature in features])
+        rating_labels = torch.stack([feature["rating_labels"] for feature in features])
+        token_features = []
+        for feature in features:
+            token_feature = {
+                key: value
+                for key, value in feature.items()
+                if key not in {"sentiment_labels", "rating_labels"}
+            }
+            token_features.append(token_feature)
+        batch = self.tokenizer.pad(
+            token_features,
+            padding=True if self.use_dynamic_padding else "max_length",
+            max_length=self.max_length,
+            return_tensors="pt",
+            pad_to_multiple_of=self.pad_to_multiple_of,
+        )
+        batch["sentiment_labels"] = sentiment_labels
+        batch["rating_labels"] = rating_labels
+        return batch
 
 
 def set_seed(seed: int) -> None:
@@ -133,22 +168,31 @@ def main(config_path: str | Path | None = None) -> None:
 
     train_loader_kwargs = _build_dataloader_kwargs(config, device, is_train=True)
     eval_loader_kwargs = _build_dataloader_kwargs(config, device, is_train=False)
+    collator = AspectSentimentCollator(
+        tokenizer=tokenizer,
+        use_dynamic_padding=bool(config["model"].get("use_dynamic_padding", True)),
+        max_length=int(config["model"]["max_length"]),
+        pad_to_multiple_of=_resolve_pad_to_multiple_of(config, device),
+    )
     train_loader = DataLoader(
         AspectSentimentDataset(train_df, tokenizer, config["model"]["max_length"], label_to_id),
         batch_size=int(config["model"]["batch_size"]),
         shuffle=True,
+        collate_fn=collator,
         **train_loader_kwargs,
     )
     val_loader = DataLoader(
         AspectSentimentDataset(val_df, tokenizer, config["model"]["max_length"], label_to_id),
         batch_size=int(config["model"].get("eval_batch_size", config["model"]["batch_size"])),
         shuffle=False,
+        collate_fn=collator,
         **eval_loader_kwargs,
     )
     test_loader = DataLoader(
         AspectSentimentDataset(test_df, tokenizer, config["model"]["max_length"], label_to_id),
         batch_size=int(config["model"].get("eval_batch_size", config["model"]["batch_size"])),
         shuffle=False,
+        collate_fn=collator,
         **eval_loader_kwargs,
     )
 
@@ -379,6 +423,20 @@ def _build_dataloader_kwargs(
         kwargs["persistent_workers"] = persistent_workers
         kwargs["prefetch_factor"] = int(config["model"].get("prefetch_factor", 2))
     return kwargs
+
+
+def _resolve_pad_to_multiple_of(
+    config: Dict[str, object],
+    device: torch.device,
+) -> int | None:
+    if not bool(config["model"].get("use_dynamic_padding", True)):
+        return None
+    value = config["model"].get("pad_to_multiple_of")
+    if value in (None, 0, "0"):
+        return None
+    if device.type != "cuda":
+        return None
+    return int(value)
 
 
 def _resolve_autocast_dtype(

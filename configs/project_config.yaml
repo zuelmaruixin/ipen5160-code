@@ -46,6 +46,8 @@ model:
   rating_loss: "mse"
   use_mixed_precision: true
   amp_dtype: "auto"
+  use_dynamic_padding: true
+  pad_to_multiple_of: 8
   num_workers: 4
   pin_memory: true
   persistent_workers: true

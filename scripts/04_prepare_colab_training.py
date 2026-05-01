@@ -191,11 +191,48 @@ def _generate_colab_notebook(output_path: Path, schema: dict, experiment_configs
             "selected_config = yaml.safe_load(SELECTED_CONFIG_PATH.read_text(encoding='utf-8'))\n"
             "print('Selected config:', SELECTED_CONFIG_PATH)\n"
             "print('max_length =', selected_config['model']['max_length'])\n"
+            "print('use_dynamic_padding =', selected_config['model'].get('use_dynamic_padding', True))\n"
+            "print('pad_to_multiple_of =', selected_config['model'].get('pad_to_multiple_of'))\n"
             "print('Training order recommendation: run maxlen_256 first; only try 384 if macro-F1 does not improve enough and >256 truncation is material.')\n"
+        ),
+        nbf.v4.new_code_cell(
+            "from pathlib import Path\n"
+            "import shutil\n\n"
+            "for path in [\n"
+            "    Path('outputs/models/checkpoints'),\n"
+            "    Path('outputs/models/final_model'),\n"
+            "    Path('outputs/logs/train_log.json'),\n"
+            "    Path('outputs/tables/model_metrics.csv'),\n"
+            "    Path('outputs/tables/classification_report.csv'),\n"
+            "    Path('outputs/tables/rating_prediction_metrics.csv'),\n"
+            "    Path('outputs/tables/epoch_history.csv'),\n"
+            "    Path('outputs/predictions/model_predictions.csv'),\n"
+            "    Path('outputs/figures/training_loss_curve.png'),\n"
+            "    Path('outputs/figures/confusion_matrix.png'),\n"
+            "    Path('outputs/figures/rating_prediction_actual_vs_predicted.png'),\n"
+            "]:\n"
+            "    if path.is_dir():\n"
+            "        shutil.rmtree(path, ignore_errors=True)\n"
+            "    elif path.exists():\n"
+            "        path.unlink()\n"
+            "print('Old checkpoints and outputs cleared.')\n"
         ),
         nbf.v4.new_code_cell(
             "from src.train_colab import main\n\n"
             "main(config_path=SELECTED_CONFIG_PATH)"
+        ),
+        nbf.v4.new_code_cell(
+            "from pathlib import Path\n"
+            "import shutil\n\n"
+            "exp_dir = Path('outputs/experiments') / SELECTED_CONFIG_KEY\n"
+            "exp_dir.mkdir(parents=True, exist_ok=True)\n"
+            "for sub in ['models', 'logs', 'tables', 'figures', 'predictions']:\n"
+            "    src = Path('outputs') / sub\n"
+            "    dst = exp_dir / sub\n"
+            "    if dst.exists():\n"
+            "        shutil.rmtree(dst)\n"
+            "    shutil.copytree(src, dst)\n"
+            "print('Archived outputs to', exp_dir)\n"
         ),
         nbf.v4.new_code_cell(
             "from pathlib import Path\n"
