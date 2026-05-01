@@ -34,7 +34,7 @@ model:
     - "hfl/chinese-roberta-wwm-ext"
     - "hfl/chinese-macbert-base"
   max_length: 256
-  batch_size: 64
+  batch_size: 256
   eval_batch_size: 128
   epochs: 3
   learning_rate: 2.0e-5
